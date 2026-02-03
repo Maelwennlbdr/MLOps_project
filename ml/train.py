@@ -1,57 +1,39 @@
 import pandas as pd
-import yaml
-import joblib
-from pathlib import Path
-
 from sklearn.model_selection import train_test_split
-from sklearn.preprocessing import StandardScaler
 from sklearn.linear_model import LogisticRegression
-from sklearn.pipeline import Pipeline
+from sklearn.metrics import accuracy_score
+import joblib
+import os
 
+# ---- CONFIG ----
+DATA_PATH = "data/raw/diabetes.csv"
+MODEL_DIR = "ml/models"
+MODEL_PATH = os.path.join(MODEL_DIR, "logreg_model.joblib")
 
-def load_config():
-    with open("ml/config.yaml", "r") as f:
-        return yaml.safe_load(f)
+# Crée le dossier du modèle s'il n'existe pas
+os.makedirs(MODEL_DIR, exist_ok=True)
 
+# ---- CHARGEMENT DES DONNÉES ----
+data = pd.read_csv(DATA_PATH)
 
-def main():
-    config = load_config()
+# Colonnes features et target
+X = data.drop(columns="Outcome")
+y = data["Outcome"]
 
-    # Load data
-    df = pd.read_csv(config["data"]["path"])
+# ---- SPLIT ----
+X_train, X_test, y_train, y_test = train_test_split(
+    X, y, test_size=0.2, random_state=42
+)
 
-    X = df.drop(columns=[config["data"]["target"]])
-    y = df[config["data"]["target"]]
+# ---- ENTRAÎNEMENT ----
+model = LogisticRegression(max_iter=1000)
+model.fit(X_train, y_train)
 
-    X_train, X_test, y_train, y_test = train_test_split(
-        X,
-        y,
-        test_size=config["data"]["test_size"],
-        random_state=config["data"]["random_state"],
-        stratify=y
-    )
+# ---- ÉVALUATION ----
+y_pred = model.predict(X_test)
+acc = accuracy_score(y_test, y_pred)
+print(f"Accuracy: {acc:.4f}")
 
-    # Build pipeline
-    steps = []
-    if config["training"]["scale"]:
-        steps.append(("scaler", StandardScaler()))
-
-    steps.append((
-        "model",
-        LogisticRegression(**config["model"]["params"])
-    ))
-
-    pipeline = Pipeline(steps)
-
-    # Train
-    pipeline.fit(X_train, y_train)
-
-    # Save model
-    Path("models").mkdir(exist_ok=True)
-    joblib.dump(pipeline, "models/model.joblib")
-
-    print("✅ Model trained and saved to models/model.joblib")
-
-
-if __name__ == "__main__":
-    main()
+# ---- SAUVEGARDE DU MODÈLE ----
+joblib.dump(model, MODEL_PATH)
+print(f"Model saved to {MODEL_PATH}")
