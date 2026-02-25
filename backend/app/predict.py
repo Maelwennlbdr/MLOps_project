@@ -1,10 +1,38 @@
 import numpy as np
+import mlflow.sklearn
+import os
+
+mlflow.set_tracking_uri("https://dagshub.com/louiseLV/MLOps_project-dagshub.mlflow")
+
+MLFLOW_MODEL_URI = os.getenv("MLFLOW_MODEL_URI", "models:/mlops-model@Production")
+
+print(f"Loading model from MLflow: {MLFLOW_MODEL_URI}")
+model = mlflow.pyfunc.load_model(MLFLOW_MODEL_URI)
+
 
 def predict_diabetes(data: np.ndarray):
     """
-    Fonction temporaire (mock).
+    Prediction using MLflow pyfunc model.
     """
-    probability = float(np.random.rand())
-    prediction = int(probability > 0.5)
+    import pandas as pd
 
-    return prediction, probability
+    columns = [
+        "Pregnancies",
+        "Glucose",
+        "BloodPressure",
+        "SkinThickness",
+        "Insulin",
+        "BMI",
+        "DiabetesPedigreeFunction",
+        "Age"
+    ]
+
+    df = pd.DataFrame(data, columns=columns)
+
+    prediction = model.predict(df)
+
+    pred_value = int(prediction[0])
+
+    probability = 0.0
+
+    return pred_value, probability
