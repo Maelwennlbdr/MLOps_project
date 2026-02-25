@@ -4,7 +4,7 @@ import os
 
 mlflow.set_tracking_uri("https://dagshub.com/louiseLV/MLOps_project-dagshub.mlflow")
 
-MLFLOW_MODEL_URI = os.getenv("MLFLOW_MODEL_URI", "models:/mlops-model@Staging")
+MLFLOW_MODEL_URI = os.getenv("MLFLOW_MODEL_URI", "models:/mlops-model@Production")
 
 print(f"Loading model from MLflow: {MLFLOW_MODEL_URI}")
 model = mlflow.pyfunc.load_model(MLFLOW_MODEL_URI)
