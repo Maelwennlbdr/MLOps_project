@@ -2,15 +2,35 @@ import numpy as np
 import mlflow.sklearn
 import os
 
-MLFLOW_MODEL_URI = os.getenv("MLFLOW_MODEL_URI", "models:/MyModel/Production")
+MLFLOW_MODEL_URI = os.getenv("MLFLOW_MODEL_URI", "models:/mlops-model@production")
 
 print(f"Loading model from MLflow: {MLFLOW_MODEL_URI}")
-model = mlflow.sklearn.load_model(MLFLOW_MODEL_URI)
+model = mlflow.pyfunc.load_model(MLFLOW_MODEL_URI)
+
 
 def predict_diabetes(data: np.ndarray):
     """
-    Prédiction réelle à partir du modèle MLflow
+    Prediction using MLflow pyfunc model.
     """
-    prob = model.predict_proba(data)[:, 1][0]  # probabilité de 1
-    pred = int(prob > 0.5)
-    return pred, float(prob)
+    import pandas as pd
+
+    columns = [
+        "Pregnancies",
+        "Glucose",
+        "BloodPressure",
+        "SkinThickness",
+        "Insulin",
+        "BMI",
+        "DiabetesPedigreeFunction",
+        "Age"
+    ]
+
+    df = pd.DataFrame(data, columns=columns)
+
+    prediction = model.predict(df)
+
+    pred_value = int(prediction[0])
+
+    probability = 0.0
+
+    return pred_value, probability
