@@ -4,4 +4,6 @@ scikit-learn
 pandas
 numpy
 pytest
+pydantic
 mlflow
+httpx
