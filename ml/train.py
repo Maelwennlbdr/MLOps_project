@@ -1,6 +1,7 @@
 import pandas as pd
 from sklearn.model_selection import train_test_split
 from sklearn.linear_model import LogisticRegression
+from mlflow.tracking import MlflowClient
 from sklearn.metrics import accuracy_score
 import joblib
 import os
@@ -17,13 +18,14 @@ os.makedirs(MODEL_DIR, exist_ok=True)
 mlflow.set_tracking_uri("https://dagshub.com/louiseLV/MLOps_project-dagshub.mlflow")
 mlflow.set_experiment("diabetes-mlops-experiment")
 
-# récupérer le commit git 
-git_commit = subprocess.check_output(
-    ["git", "rev-parse", "--short", "HEAD"]
-).decode("utf-8").strip()
+# récupérer le commit git
+git_commit = (
+    subprocess.check_output(["git", "rev-parse", "--short", "HEAD"])
+    .decode("utf-8")
+    .strip()
+)
 
 with mlflow.start_run():
-
     data = pd.read_csv(DATA_PATH)
 
     X = data.drop(columns="Outcome")
@@ -51,10 +53,21 @@ with mlflow.start_run():
 
     result = mlflow.sklearn.log_model(model, "model")
 
-    mlflow.register_model(
-    result.model_uri,
-    "mlops-model"
+    # enregistrer le modèle
+    registered_model = mlflow.register_model(result.model_uri, "mlops-model")
+
+    # créer client MLflow
+    client = MlflowClient()
+
+    # récupérer la version créée
+    model_version = registered_model.version
+
+    # assigner automatiquement l'alias Staging
+    client.set_registered_model_alias(
+        name="mlops-model", alias="Staging", version=model_version
     )
+
+    print(f"Model version {model_version} promoted to Staging")
 
     joblib.dump(model, MODEL_PATH)
     print(f"Model saved to {MODEL_PATH}")
