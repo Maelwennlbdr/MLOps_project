@@ -14,6 +14,7 @@ MODEL_PATH = os.path.join(MODEL_DIR, "logreg_model.joblib")
 
 os.makedirs(MODEL_DIR, exist_ok=True)
 
+mlflow.set_tracking_uri("https://dagshub.com/louiseLV/MLOps_project-dagshub.mlflow")
 mlflow.set_experiment("diabetes-mlops-experiment")
 
 # récupérer le commit git 
