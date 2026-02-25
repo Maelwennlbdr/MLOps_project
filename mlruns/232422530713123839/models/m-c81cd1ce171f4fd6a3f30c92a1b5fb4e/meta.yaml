@@ -1,0 +1,10 @@
+artifact_location: file:///Users/louiselavergne/Downloads/Projet_MLOps/MLOps_project/mlruns/232422530713123839/models/m-c81cd1ce171f4fd6a3f30c92a1b5fb4e/artifacts
+creation_timestamp: 1772035782811
+experiment_id: '232422530713123839'
+last_updated_timestamp: 1772035784992
+model_id: m-c81cd1ce171f4fd6a3f30c92a1b5fb4e
+model_type: null
+name: model
+source_run_id: ba626f70c528449d819ecc3d4b63ff71
+status: 2
+status_message: null
