@@ -1,7 +1,15 @@
 from fastapi.testclient import TestClient
+import sys
+import os
+
+# Ajoute backend au path
+backend_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "backend"))
+sys.path.append(backend_path)
+
 from app.main import app
 
 client = TestClient(app)
+
 
 def test_health():
     res = client.get("/health")
