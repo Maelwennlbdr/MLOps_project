@@ -14,14 +14,29 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Build Docker image
-        run: |
-          docker build -t mlops-staging .
+        run: docker build -t mlops-staging .
 
-      - name: Run smoke container
+      - name: Run container
         run: |
-          docker run --rm \
-          -e MLFLOW_TRACKING_URI="${{ secrets.MLFLOW_TRACKING_URI }}" \
-          -e MLFLOW_TRACKING_USERNAME="${{ secrets.MLFLOW_TRACKING_USERNAME }}" \
-          -e MLFLOW_TRACKING_PASSWORD="${{ secrets.MLFLOW_TRACKING_PASSWORD }}" \
-          -e MODEL_URI="${{ vars.MODEL_URI_STAGING }}" \
-          mlops-staging
+          docker run -d -p 8000:8000 \
+            -e MLFLOW_TRACKING_URI="${{ secrets.MLFLOW_TRACKING_URI }}" \
+            -e MLFLOW_TRACKING_USERNAME="${{ secrets.MLFLOW_TRACKING_USERNAME }}" \
+            -e MLFLOW_TRACKING_PASSWORD="${{ secrets.MLFLOW_TRACKING_PASSWORD }}" \
+            -e MODEL_URI="${{ vars.MODEL_URI_STAGING }}" \
+            --name staging-test \
+            mlops-staging
+
+      - name: Wait for container
+        run: sleep 5
+
+      - name: Test health endpoint
+        run: curl -f http://localhost:8000/health
+
+      - name: Test predict endpoint
+        run: |
+          curl -f -X POST http://localhost:8000/predict \
+          -H "Content-Type: application/json" \
+          -d '{"Pregnancies":1,"Glucose":85,"BloodPressure":66,"SkinThickness":29,"Insulin":0,"BMI":26.6,"DiabetesPedigreeFunction":0.351,"Age":31}'
+
+      - name: Stop container
+        run: docker stop staging-test
