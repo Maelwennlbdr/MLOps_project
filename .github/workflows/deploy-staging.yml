@@ -25,18 +25,20 @@ jobs:
             -e MODEL_URI="${{ vars.MODEL_URI_STAGING }}" \
             --name staging-test \
             mlops-staging
-      
-      - name: Show container logs
-        run: docker logs staging-test
-      
-      - name: List running containers
-        run: docker ps -a
 
-      - name: Wait for container
-        run: sleep 10
-
-      - name: Test health endpoint
-        run: curl -f http://localhost:8000/health
+      - name: Wait for API to be ready
+        run: |
+          for i in {1..20}; do
+            if curl -s http://localhost:8000/health; then
+              echo "API is ready"
+              exit 0
+            fi
+            echo "Waiting for API..."
+            sleep 3
+          done
+          echo "API did not start in time"
+          docker logs staging-test
+          exit 1
 
       - name: Test predict endpoint
         run: |
