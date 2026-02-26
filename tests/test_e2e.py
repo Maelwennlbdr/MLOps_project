@@ -6,7 +6,7 @@ import os
 backend_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "backend"))
 sys.path.append(backend_path)
 
-from app.main import app
+from backend.app.main import app
 
 client = TestClient(app)
 
@@ -27,7 +27,7 @@ def test_e2e_predict():
         "Insulin": 0,
         "BMI": 33.6,
         "DiabetesPedigreeFunction": 0.627,
-        "Age": 50
+        "Age": 50,
     }
 
     response = client.post("/predict", json=sample)
