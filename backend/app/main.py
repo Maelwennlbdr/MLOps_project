@@ -1,8 +1,8 @@
 from fastapi import FastAPI
 import numpy as np
 
-from backend.app.schemas import DiabetesInput, DiabetesOutput
-from backend.app.predict import predict_diabetes
+from .schemas import DiabetesInput, DiabetesOutput
+from .predict import predict_diabetes
 
 app = FastAPI(
     title="Diabetes Prediction API",
