@@ -25,9 +25,15 @@ jobs:
             -e MODEL_URI="${{ vars.MODEL_URI_STAGING }}" \
             --name staging-test \
             mlops-staging
+      
+      - name: Show container logs
+        run: docker logs staging-test
+      
+      - name: List running containers
+        run: docker ps -a
 
       - name: Wait for container
-        run: sleep 5
+        run: sleep 10
 
       - name: Test health endpoint
         run: curl -f http://localhost:8000/health
