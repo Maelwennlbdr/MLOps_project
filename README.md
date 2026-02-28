@@ -138,32 +138,49 @@ The project implements **3 GitHub Actions workflows** for automated testing and 
 
 ---
 
-### **Pipeline 3: staging → main** (Quality Gates + Production Deploy)
+### **Pipeline 3: staging → main** (Training + Quality Gates + Production Deploy)
 
 **Trigger**: Push to `main` branch  
 **File**: `.github/workflows/deploy-prod.yml`
 
-**Critical Steps**:
+**Full Production Pipeline**:
 
-1. **Quality Gates Validation** (BLOCKING STEP)
+1. **Setup & Dependencies**
+   ```bash
+   pip install mlflow requirements.txt dvc[s3]
+   ```
+
+2. **Fetch Data** (DVC pull from S3)
+   ```bash
+   dvc pull -r myremote
+   ```
+
+3. **Train Model** (Fresh version for this deployment)
+   ```bash
+   python ml/train.py
+   ```
+   - Trains LogisticRegression on latest data
+   - Registers new version as `mlops-model`
+   - Assigns to `@Staging` alias automatically
+   - Logs git commit + DVC version for traceability
+
+4. **Quality Gates Validation** (BLOCKING STEP)
    ```bash
    python ml/quality_gates.py
    ```
-   - Fetches latest model version in `@Staging`
-   - Checks metrics against thresholds:
-     - `accuracy >= 0.74` ✓
-   - **If FAIL**: Pipeline stops, model stays in Staging, production not updated
-   - **If PASS**: Model automatically promoted to `@Production` stage
+   - Fetches latest model version with `@Staging` alias
+   - Validates metrics against thresholds:
+     - ✅ `accuracy >= 0.74`
+   - **If FAIL**: Pipeline stops, model stays in Staging, production NOT updated
+   - **If PASS**: Automatically promotes model to `@Production` alias
 
-2. ✅ Build production Docker image
-3. ✅ Start container with production credentials
-4. ✅ Run final smoke tests
-5. ✅ Validate API endpoints
+5. ✅ Build production Docker image
+6. ✅ Start container with production credentials
+7. ✅ Run final smoke tests (health + predict endpoints)
 
-**Environment Variables**:
-- `MLFLOW_MODEL_URI`: Points to `@Production` version (highest priority)
+**Key Advantage**: Each production deployment gets a **fresh trained model**, so quality gates always find a model to validate.
 
-**Result**: Only models that pass quality gates reach production
+**Result**: Only models passing quality gates reach production with `@Production` alias
 
 ---
 
@@ -172,49 +189,56 @@ The project implements **3 GitHub Actions workflows** for automated testing and 
 The model follows a **3-stage lifecycle** in MLflow Registry:
 
 ```
-Training → Staging → Production
-   ↓          ↓           ↓
-train.py  [Quality   Served in
-registers  Gates]      Prod API
+Push to main
+   ↓
+deploy-prod.yml runs:
+   1. Train fresh model → @Staging
+   2. Quality Gates check (accuracy >= 0.74)
+   3. If ✅ Pass → Promote to @Production
+   4. If ❌ Fail → Stay in @Staging (prod unchanged)
+   ↓
+API serves only @Production models
 ```
 
-### **Stage 1: Training → Staging** (Automatic)
+### **Stage 1: Training → Staging** (Automatic in prod pipeline)
 
-**When**: `ml/train.py` runs (manual trigger or scheduled)
+**When**: Code is pushed to `main` branch (triggers `deploy-prod.yml`)
 
 ```python
-# train.py automatically:
-1. Train LogisticRegression on diabetes dataset
-2. Log metrics (accuracy, params) to MLflow
-3. Register model as "mlops-model"
-4. Assign to @Staging alias (always gets latest trained model)
-5. Log: git commit + DVC version for reproducibility
+# deploy-prod.yml automatically runs:
+1. Fetch data from DVC remote (S3)
+2. python ml/train.py:
+   - Train LogisticRegression on diabetes dataset
+   - Log metrics (accuracy, params) to MLflow
+   - Register model as "mlops-model"
+   - Assign to @Staging alias (latest trained version)
+   - Log: git commit + DVC version for reproducibility
 ```
 
-**Result**: New model version in `@Staging` (not served anywhere yet)
+**Result**: New model version in `@Staging` (ready for validation)
 
 ---
 
-### **Stage 2: Staging → Production** (Quality Gates)
+### **Stage 2: Staging → Production** (Quality Gates Check)
 
-**When**: Code is merged to `main` branch (triggers `deploy-prod.yml`)
+**When**: Same workflow, right after training
 
-**Quality Gates Check** (`ml/quality_gates.py`):
+**Quality Gates Validation** (`ml/quality_gates.py`):
 ```python
 # Validates that @Staging model meets criteria:
-- accuracy >= 0.74  ← Current model: 0.7468 ✓ PASSES
+accuracy >= 0.74  ← Current model: 0.7468 ✓ PASSES
 
 # If ALL checks pass:
-  → Promote to @Production
-  → Log: "Model vX promoted to Production"
+  → Promote to @Production alias
+  → Only this version served in production
   
 # If ANY check fails:
   → Model stays in @Staging
-  → Pipeline fails
-  → Production keeps serving previous @Production version
+  → Previous @Production version still serving
+  → Pipeline fails (preventing bad deployment)
 ```
 
-**Security**: Production only ever serves models from `@Production` stage
+**Security**: Production ONLY ever serves models with `@Production` alias
 
 ---
 
@@ -231,8 +255,10 @@ model = mlflow.pyfunc.load_model(MLFLOW_MODEL_URI)
 
 **Behavior**:
 - Always loads from `@Production` alias
-- If no `@Production` version exists, API fails (safe-fail)
-- No automatic rollback (manual if needed)
+- If no `@Production` version exists → API fails (safe-fail)
+- No automatic rollback (manual intervention needed if reverting)
+
+---
 
 ---
 
@@ -331,70 +357,104 @@ curl -X POST http://localhost:8000/predict \
 
 ## 🌐 Production Deployment
 
-### **Architecture**
+### **Automated Production Pipeline Flow**
 
 ```
-GitHub main branch → GitHub Actions
-                     ↓
-                 Quality Gates Check
-                     ↓
-                 Docker Build & Push
-                     ↓
-                 Cloud Platform (Railway/Render)
-                     ↓
-                 Public HTTPS URL
+1. Code ready on staging branch
+   ↓
+2. Create PR: staging → main
+   ↓
+3. Merge PR to main (GitHub Actions triggers)
+   ↓
+4. deploy-prod.yml executes:
+   a. 🎓 Train fresh model on latest data
+   b. ✅ Run quality gates (accuracy check)
+   c. 🚀 If OK: promote to @Production
+   d. 🐳 Build & deploy Docker container
+   e. 🧪 Run smoke tests on live API
+   ↓
+5. API serves predictions from @Production model
 ```
 
-### **Deployment Steps**
+### **Prerequisites for Deployment**
 
-1. **Environment Setup**
-   - Add GitHub Secrets (MLFLOW_*, AWS_*, etc.)
-   - Configure cloud platform credentials
+Add these **GitHub Secrets** to your repo:
+- `MLFLOW_TRACKING_URI` - DagsHub MLflow instance
+- `MLFLOW_TRACKING_USERNAME` - DagsHub username
+- `MLFLOW_TRACKING_PASSWORD` - DagsHub token
+- `AWS_ACCESS_KEY_ID` - S3 access key (for DVC)
+- `AWS_SECRET_ACCESS_KEY` - S3 secret key
+- `AWS_DEFAULT_REGION` - S3 region
 
-2. **Push to main**
-   ```bash
-   git checkout staging
-   git pull
-   # Merge PR from dev
-   
-   git checkout main
-   git merge staging
-   git push origin main
-   ```
+### **Merging to Production**
 
-3. **GitHub Actions Runs**
-   - Quality gates validation
-   - Docker image build
-   - Cloud deployment
-   - Health checks
+```bash
+# 1. On staging, all tests passed
+git checkout staging
+git status
 
-4. **Verify Production**
-   ```bash
-   curl https://your-app.railway.app/health
-   curl -X POST https://your-app.railway.app/predict ...
-   ```
+# 2. Create PR or merge
+git checkout main
+git merge staging
+git push origin main
 
-### **Monitoring**
+# 3. GitHub Actions automatically:
+#    - Trains model
+#    - Validates quality gates
+#    - Deploys if OK
+```
 
+### **Monitoring Deployment**
+
+- **GitHub Actions Logs**: Check workflow progress
 - **MLflow Dashboard**: [https://dagshub.com/louiseLV/MLOps_project](https://dagshub.com/louiseLV/MLOps_project)
   - View all model versions
-  - Model stages (@Staging, @Production)
-  - Metrics & parameters
+  - Check @Production vs @Staging aliases
+  - Track metrics & parameters
 
-- **Production Logs**: Cloud platform (Railway/Render) dashboard
+### **If Quality Gates Fail**
+
+```
+Error: accuracy: 0.73 < 0.74
+→ Model stays in @Staging
+→ Production continues serving previous @Production version
+→ Fix model, retrain, and merge to main again
+```
 
 ---
 
 ## 🔍 Troubleshooting
 
+### **Training Fails in deploy-prod.yml**
+
+```
+Error: dvc pull failed
+Error: DVC remote unreachable
+```
+
+**Solution**: 
+1. Verify AWS credentials in GitHub Secrets
+2. Check DVC remote configuration (`dvc remote list`)
+3. Ensure S3 bucket is accessible
+
+---
+
 ### **Quality Gate Fails**
 
 ```
 ❌ accuracy: 0.73 < 0.74 ✗
-   Model stays in Staging, production not updated
+   Model stays in @Staging, production NOT updated
+   Previous @Production model continues serving
 ```
 
-**Solution**: Improve model, retrain, and rerun workflow
+**Solution**: 
+1. Improve model training (better hyperparameters)
+2. Check data quality → might need more/better features
+3. Retrain locally: `python ml/train.py`
+4. Push changes and merge to main again
+5. Quality gates will run automatically with new model
+
+---
 
 ### **API Cannot Load Model**
 
@@ -402,17 +462,64 @@ GitHub main branch → GitHub Actions
 ERROR: Could not find model 'mlops-model@Production'
 ```
 
+**Cause**: No model has been promoted to @Production (all training/gates failed)
+
 **Solution**: 
-1. Check MLflow credentials
-2. Run `ml/quality_gates.py` to promote a Staging model
-3. Ensure model version exists in registry
+1. Check MLflow credentials are correct
+2. View MLflow dashboard to see available versions
+3. Ensure at least one model passed quality gates
+4. Manually check: `python ml/quality_gates.py`
 
-### **Tests Fail in CI**
+---
 
-Check logs in GitHub Actions:
-- Unit test: schema validation
-- Integration: MLflow connectivity
-- E2E: API endpoint availability
+### **"Aucun modèle trouvé avec l'alias 'Staging'"**
+
+```
+❌ Aucun modèle trouvé avec l'alias 'Staging'
+```
+
+**Cause**: Training step failed in deploy-prod.yml
+
+**Solution**:
+1. Check GitHub Actions logs for training step error
+2. Common issues:
+   - DVC pull failed (AWS credentials)
+   - Python dependency missing
+   - Dataset file corrupted
+3. Fix the training issue locally first
+4. Commit fix and retry merge to main
+
+---
+
+### **Tests Fail in CI (PR → dev)**
+
+```
+FAILED tests/test_unit_schema.py
+FAILED tests/test_integration_api_mlflow.py
+```
+
+**Solution**:
+1. Run tests locally: `pytest -v`
+2. Check error messages in GitHub Actions logs
+3. Common issues:
+   - Package not installed
+   - MLflow credentials missing locally
+   - API not responding
+4. Fix locally, commit, re-push to feature branch
+
+---
+
+### **Docker Build Fails**
+
+```
+ERROR: requirements.txt not found
+ERROR: Dockerfile issue
+```
+
+**Solution**:
+1. Verify Dockerfile exists at project root
+2. Check requirements.txt has all dependencies
+3. Test locally: `docker build .`
 
 ---
 
