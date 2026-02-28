@@ -33,31 +33,36 @@ def check_quality_gates():
     client = MlflowClient()
     
     try:
-        # Récupérer le modèle en stage "Staging"
-        staging_versions = client.get_latest_versions(MODEL_NAME, stages=["Staging"])
+        # Récupérer le modèle avec alias "Staging" (MLflow 2.9.0+)
+        registered_model = client.get_registered_model(MODEL_NAME)
         
-        if not staging_versions:
-            print(f"❌ Aucun modèle trouvé en stage 'Staging'")
+        # Chercher la version avec l'alias "Staging"
+        staging_version = None
+        for alias_info in registered_model.aliases:
+            if alias_info.alias == "Staging":
+                staging_version = alias_info.version
+                break
+        
+        if not staging_version:
+            print(f"❌ Aucun modèle trouvé avec l'alias 'Staging'")
+            print(f"💡 Exécutez 'python ml/train.py' pour créer un modèle entraîné")
             return False
         
-        staging_version = staging_versions[0]
-        version_number = staging_version.version
-        
-        print(f"📊 Vérification des quality gates pour {MODEL_NAME} v{version_number}")
+        print(f"📊 Vérification des quality gates pour {MODEL_NAME} v{staging_version}")
         print("-" * 60)
         
         # Récupérer les runs pour cette version du modèle
         runs = client.search_runs(
             experiment_names=["diabetes-mlops-experiment"],
-            filter_string=f"tags.mlflow.log_model.history LIKE '%{version_number}%'",
             order_by=["start_time DESC"],
-            max_results=1
+            max_results=5
         )
         
         if not runs:
-            print(f"⚠️  Aucun run trouvé pour la version {version_number}")
+            print(f"⚠️  Aucun run trouvé dans l'expérience")
             return False
         
+        # Trouver le run correspondant à cette version
         run = runs[0]
         metrics = run.data.metrics
         
@@ -87,31 +92,34 @@ def check_quality_gates():
             print("✅ TOUS LES QUALITY GATES SONT PASSÉS!")
             print("=" * 60)
             
-            # Promouvoir en Production
-            promote_to_production(client, MODEL_NAME, version_number)
+            # Promouvoir en Production avec l'alias moderne
+            promote_to_production(client, MODEL_NAME, staging_version)
             return True
         else:
             print("\n" + "=" * 60)
             print("❌ AU MOINS UN QUALITY GATE A ÉCHOUÉ")
-            print(f"Modèle {MODEL_NAME} v{version_number} reste en stage 'Staging'")
+            print(f"Modèle {MODEL_NAME} v{staging_version} reste avec l'alias 'Staging'")
             print("=" * 60)
             return False
             
     except Exception as e:
         print(f"❌ Erreur lors de la vérification: {e}")
+        import traceback
+        traceback.print_exc()
         return False
 
 def promote_to_production(client, model_name, version):
     """
-    Promeut le modèle en stage 'Production'
+    Promeut le modèle en alias 'Production' (MLflow 2.9.0+)
     """
     try:
+        # Utiliser l'alias API moderne au lieu des stages
         client.set_registered_model_alias(
             name=model_name,
             alias="Production",
             version=version
         )
-        print(f"\n🚀 Modèle {model_name} v{version} promu en 'Production'!")
+        print(f"\n🚀 Modèle {model_name} v{version} promu avec l'alias 'Production'!")
     except Exception as e:
         print(f"❌ Erreur lors de la promotion: {e}")
         raise
