@@ -19,6 +19,7 @@ ACCURACY_THRESHOLD = 0.74  # Seuil minimum d'accuracy
 QUALITY_GATES = {
     "accuracy": ACCURACY_THRESHOLD,
 }
+EXPERIMENT_NAME = "diabetes-mlops-experiment"
 
 
 def check_quality_gates():
@@ -59,8 +60,13 @@ def check_quality_gates():
         print("-" * 60)
 
         # Récupérer les runs pour cette version du modèle
+        experiment = client.get_experiment_by_name(EXPERIMENT_NAME)
+        if experiment is None:
+            print(f"⚠️  Expérience MLflow introuvable: {EXPERIMENT_NAME}")
+            return False
+
         runs = client.search_runs(
-            experiment_names=["diabetes-mlops-experiment"],
+            experiment_ids=[experiment.experiment_id],
             order_by=["start_time DESC"],
             max_results=5,
         )
