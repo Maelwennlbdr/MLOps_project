@@ -1,0 +1,50 @@
+name: Deploy Staging
+
+on:
+  push:
+    branches:
+      - staging
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Build Docker image
+        run: docker build -t mlops-staging .
+
+      - name: Run container
+        run: |
+          docker run -d -p 8000:8000 \
+            -e MLFLOW_TRACKING_URI="${{ secrets.MLFLOW_TRACKING_URI }}" \
+            -e MLFLOW_TRACKING_USERNAME="${{ secrets.MLFLOW_TRACKING_USERNAME }}" \
+            -e MLFLOW_TRACKING_PASSWORD="${{ secrets.MLFLOW_TRACKING_PASSWORD }}" \
+            -e MODEL_URI="${{ vars.MODEL_URI_STAGING }}" \
+            --name staging-test \
+            mlops-staging
+
+      - name: Wait for API to be ready
+        run: |
+          for i in {1..20}; do
+            if curl -s http://localhost:8000/health; then
+              echo "API is ready"
+              exit 0
+            fi
+            echo "Waiting for API..."
+            sleep 3
+          done
+          echo "API did not start in time"
+          docker logs staging-test
+          exit 1
+
+      - name: Test predict endpoint
+        run: |
+          curl -f -X POST http://localhost:8000/predict \
+          -H "Content-Type: application/json" \
+          -d '{"Pregnancies":1,"Glucose":85,"BloodPressure":66,"SkinThickness":29,"Insulin":0,"BMI":26.6,"DiabetesPedigreeFunction":0.351,"Age":31}'
+
+      - name: Stop container
+        run: docker stop staging-test
