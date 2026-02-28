@@ -2,10 +2,9 @@ name: Train Model
 
 on:
   workflow_dispatch:
-  # Optionnel : décommente si on veut entraîner à chaque push sur dev
-  # push:
-  #   branches:
-  #     - dev
+  push:
+    branches:
+      - dev
 
 jobs:
   train:
