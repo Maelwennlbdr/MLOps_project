@@ -463,21 +463,10 @@ This project demonstrates:
 
 ---
 
-## 📅 Timeline
-
-| Date | Milestone |
-|------|-----------|
-| 28/02 | Quality gates implementation |
-| 01/03 | Final testing & validation |
-| 03/03 | Production deployment |
-| 04/03 | **Project Submission** |
-
----
-
 ## 👥 Team
 
-- **Albane Coiffe** - Backend & API
-- **Louise Lavergne** - ML & MLflow
-- **Maelwenn Labidurie** - DevOps & CI/CD
+- **Albane Coiffe** 
+- **Louise Lavergne** 
+- **Maelwenn Labidurie** 
 
 **Repository**: [https://github.com/Maelwennlbdr/MLOps_project](https://github.com/Maelwennlbdr/MLOps_project)
