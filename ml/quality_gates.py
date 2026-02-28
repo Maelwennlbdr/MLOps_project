@@ -37,11 +37,18 @@ def check_quality_gates():
         registered_model = client.get_registered_model(MODEL_NAME)
 
         # Chercher la version avec l'alias "Staging"
+        # MLflow expose aliases comme un dict alias -> version dans les versions récentes.
         staging_version = None
-        for alias_info in registered_model.aliases:
-            if alias_info.alias == "Staging":
-                staging_version = alias_info.version
-                break
+        aliases = registered_model.aliases
+
+        if isinstance(aliases, dict):
+            staging_version = aliases.get("Staging")
+        else:
+            # Fallback défensif pour d'anciens formats éventuels.
+            for alias_info in aliases or []:
+                if getattr(alias_info, "alias", None) == "Staging":
+                    staging_version = getattr(alias_info, "version", None)
+                    break
 
         if not staging_version:
             print(f"❌ Aucun modèle trouvé avec l'alias 'Staging'")
