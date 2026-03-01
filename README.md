@@ -92,7 +92,7 @@ feature/xxx → [PR, tests] → dev → [integration] → staging → [validatio
 
 The project implements **3 GitHub Actions workflows** for automated testing and deployment:
 
-### **Pipeline 1: PR → dev** (Test & Build)
+### **Pipeline 1: PR → dev** (Unit + Integration + Docker Build)
 
 **Trigger**: Pull Request to `dev` branch  
 **File**: `.github/workflows/ci.yml`
@@ -101,34 +101,39 @@ The project implements **3 GitHub Actions workflows** for automated testing and 
 1. ✅ Checkout code
 2. ✅ Setup Python 3.10
 3. ✅ Install dependencies (`requirements.txt`)
-4. ✅ Run **all test suite**:
+4. ✅ Run **unit tests only**:
    - Unit tests (`test_unit_schema.py`)
-   - Integration tests (`test_integration_*.py`)
-   - End-to-end tests (`test_e2e.py`)
-5. ✅ Build Docker image (no push)
+   - Sanity test (`test_dummy.py`)
+5. ✅ Run **integration tests only**:
+   - Integration tests (`test_integration_mlflow.py`)
+   - Integration tests (`test_integration_api_mlflow.py`)
+6. ✅ Build Docker image (no push)
 
 **Success Criteria**:
 - All tests pass ✓
-- No lint/type errors ✓
+- Docker image builds successfully (no push) ✓
 
 **Failure**: PR blocked, cannot merge to `dev`
 
 ---
 
-### **Pipeline 2: dev → staging** (Deploy & Validate)
+### **Pipeline 2: dev → staging** (Full Test Suite + Deploy Staging)
 
 **Trigger**: Push to `staging` branch  
 **File**: `.github/workflows/deploy-staging.yml`
 
 **Steps**:
 1. ✅ Checkout code
-2. ✅ Build Docker image (`docker build -t mlops-staging .`)
-3. ✅ Start container with staging environment variables
-4. ✅ Wait for API readiness (health check endpoint)
-5. ✅ Run smoke tests:
+2. ✅ Setup Python 3.10
+3. ✅ Install dependencies (`requirements.txt`)
+4. ✅ Run **full test suite** (`pytest -v`)
+5. ✅ Build Docker image (`docker build -t mlops-staging .`)
+6. ✅ Start container with staging environment variables
+7. ✅ Wait for API readiness (health check endpoint)
+8. ✅ Run smoke tests:
    - `/health` endpoint
    - `/predict` with sample data
-6. ✅ Stop container
+9. ✅ Stop container
 
 **Environment Variables**:
 - `MLFLOW_TRACKING_URI`: DagsHub instance
@@ -138,7 +143,7 @@ The project implements **3 GitHub Actions workflows** for automated testing and 
 
 ---
 
-### **Pipeline 3: staging → main** (Training + Quality Gates + Production Deploy)
+### **Pipeline 3: staging → main** (Promotion Gate + Production Deploy)
 
 **Trigger**: Push to `main` branch  
 **File**: `.github/workflows/deploy-prod.yml`
@@ -147,24 +152,11 @@ The project implements **3 GitHub Actions workflows** for automated testing and 
 
 1. **Setup & Dependencies**
    ```bash
-   pip install mlflow requirements.txt dvc[s3]
+   pip install mlflow
+   pip install -r requirements.txt
    ```
 
-2. **Fetch Data** (DVC pull from S3)
-   ```bash
-   dvc pull -r myremote
-   ```
-
-3. **Train Model** (Fresh version for this deployment)
-   ```bash
-   python ml/train.py
-   ```
-   - Trains LogisticRegression on latest data
-   - Registers new version as `mlops-model`
-   - Assigns to `@Staging` alias automatically
-   - Logs git commit + DVC version for traceability
-
-4. **Quality Gates Validation** (BLOCKING STEP)
+2. **Quality Gates Validation** (BLOCKING STEP)
    ```bash
    python ml/quality_gates.py
    ```
@@ -174,11 +166,11 @@ The project implements **3 GitHub Actions workflows** for automated testing and 
    - **If FAIL**: Pipeline stops, model stays in Staging, production NOT updated
    - **If PASS**: Automatically promotes model to `@Production` alias
 
-5. ✅ Build production Docker image
-6. ✅ Start container with production credentials
-7. ✅ Run final smoke tests (health + predict endpoints)
+3. ✅ Build production Docker image
+4. ✅ Start container with production credentials
+5. ✅ Run final smoke tests (health + predict endpoints)
 
-**Key Advantage**: Each production deployment gets a **fresh trained model**, so quality gates always find a model to validate.
+**Key Advantage**: Production deploys the already validated model candidate from registry flow (`@Staging` -> `@Production`), without retraining on `main`.
 
 **Result**: Only models passing quality gates reach production with `@Production` alias
 
@@ -192,7 +184,7 @@ The model follows a **3-stage lifecycle** in MLflow Registry:
 Push to main
    ↓
 deploy-prod.yml runs:
-   1. Train fresh model → @Staging
+   1. Read candidate model from @Staging
    2. Quality Gates check (accuracy >= 0.74)
    3. If ✅ Pass → Promote to @Production
    4. If ❌ Fail → Stay in @Staging (prod unchanged)
@@ -200,28 +192,22 @@ deploy-prod.yml runs:
 API serves only @Production models
 ```
 
-### **Stage 1: Training → Staging** (Automatic in prod pipeline)
+### **Stage 1: Candidate Model in Staging**
 
-**When**: Code is pushed to `main` branch (triggers `deploy-prod.yml`)
+**When**: Candidate model has been registered and assigned to `@Staging` upstream (before production promotion).
 
 ```python
-# deploy-prod.yml automatically runs:
-1. Fetch data from DVC remote (S3)
-2. python ml/train.py:
-   - Train LogisticRegression on diabetes dataset
-   - Log metrics (accuracy, params) to MLflow
-   - Register model as "mlops-model"
-   - Assign to @Staging alias (latest trained version)
-   - Log: git commit + DVC version for reproducibility
+# Candidate exists in MLflow Registry:
+mlops-model@Staging
 ```
 
-**Result**: New model version in `@Staging` (ready for validation)
+**Result**: Staging version ready for promotion checks.
 
 ---
 
 ### **Stage 2: Staging → Production** (Quality Gates Check)
 
-**When**: Same workflow, right after training
+**When**: `deploy-prod.yml` runs after merge to `main`
 
 **Quality Gates Validation** (`ml/quality_gates.py`):
 ```python
@@ -367,11 +353,10 @@ curl -X POST http://localhost:8000/predict \
 3. Merge PR to main (GitHub Actions triggers)
    ↓
 4. deploy-prod.yml executes:
-   a. 🎓 Train fresh model on latest data
-   b. ✅ Run quality gates (accuracy check)
-   c. 🚀 If OK: promote to @Production
-   d. 🐳 Build & deploy Docker container
-   e. 🧪 Run smoke tests on live API
+   a. ✅ Run quality gates on @Staging model
+   b. 🚀 If OK: promote to @Production
+   c. 🐳 Build & deploy Docker container
+   d. 🧪 Run smoke tests on live API
    ↓
 5. API serves predictions from @Production model
 ```
@@ -382,9 +367,6 @@ Add these **GitHub Secrets** to your repo:
 - `MLFLOW_TRACKING_URI` - DagsHub MLflow instance
 - `MLFLOW_TRACKING_USERNAME` - DagsHub username
 - `MLFLOW_TRACKING_PASSWORD` - DagsHub token
-- `AWS_ACCESS_KEY_ID` - S3 access key (for DVC)
-- `AWS_SECRET_ACCESS_KEY` - S3 secret key
-- `AWS_DEFAULT_REGION` - S3 region
 
 ### **Merging to Production**
 
@@ -399,7 +381,6 @@ git merge staging
 git push origin main
 
 # 3. GitHub Actions automatically:
-#    - Trains model
 #    - Validates quality gates
 #    - Deploys if OK
 ```
@@ -418,8 +399,94 @@ git push origin main
 Error: accuracy: 0.73 < 0.74
 → Model stays in @Staging
 → Production continues serving previous @Production version
-→ Fix model, retrain, and merge to main again
+→ Fix model/training pipeline upstream, then merge to main again
 ```
+
+---
+
+## 🔍 Troubleshooting
+
+### **Quality Gate Fails**
+
+```
+❌ accuracy: 0.73 < 0.74 ✗
+   Model stays in @Staging, production NOT updated
+   Previous @Production model continues serving
+```
+
+**Solution**: 
+1. Improve model training (better hyperparameters)
+2. Check data quality → might need more/better features
+3. Retrain/register candidate model upstream: `python ml/train.py`
+4. Push changes and merge to main again
+5. Quality gates will run automatically with new model
+
+---
+
+### **API Cannot Load Model**
+
+```
+ERROR: Could not find model 'mlops-model@Production'
+```
+
+**Cause**: No model has been promoted to @Production (all training/gates failed)
+
+**Solution**: 
+1. Check MLflow credentials are correct
+2. View MLflow dashboard to see available versions
+3. Ensure at least one model passed quality gates
+4. Manually check: `python ml/quality_gates.py`
+
+---
+
+### **"Aucun modèle trouvé avec l'alias 'Staging'"**
+
+```
+❌ Aucun modèle trouvé avec l'alias 'Staging'
+```
+
+**Cause**: No candidate model was available in registry under `@Staging`
+
+**Solution**:
+1. Check training workflow/logs that create/register the model
+2. Common issues:
+   - Model registration failed
+   - Python dependency missing
+   - Dataset unavailable/corrupted in training environment
+3. Fix the training issue locally first (`python ml/train.py`)
+4. Commit fix and retry merge to main
+
+---
+
+### **Tests Fail in CI (PR → dev)**
+
+```
+FAILED tests/test_unit_schema.py
+FAILED tests/test_integration_api_mlflow.py
+```
+
+**Solution**:
+1. Run tests locally: `pytest -v`
+2. Check error messages in GitHub Actions logs
+3. Common issues:
+   - Package not installed
+   - MLflow credentials missing locally
+   - API not responding
+4. Fix locally, commit, re-push to feature branch
+
+---
+
+### **Docker Build Fails**
+
+```
+ERROR: requirements.txt not found
+ERROR: Dockerfile issue
+```
+
+**Solution**:
+1. Verify Dockerfile exists at project root
+2. Check requirements.txt has all dependencies
+3. Test locally: `docker build .`
 
 ---
 
