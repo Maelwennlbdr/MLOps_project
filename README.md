@@ -111,7 +111,7 @@ The project implements **3 GitHub Actions workflows** for automated testing and 
 
 **Success Criteria**:
 - All tests pass ✓
-- No lint/type errors ✓
+- Docker image builds successfully (no push) ✓
 
 **Failure**: PR blocked, cannot merge to `dev`
 
