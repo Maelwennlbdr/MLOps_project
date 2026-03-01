@@ -32,7 +32,7 @@ jobs:
             mlops-prod
 
       - name: Show container logs
-        run: docker logs staging-test
+        run: docker logs prod-test
       
       - name: List running containers
         run: docker ps -a
