@@ -25,6 +25,16 @@ git_commit = (
     .strip()
 )
 
+# récupérer la version DVC du dataset
+try:
+    dvc_version = (
+        subprocess.check_output(["dvc", "dag"])
+        .decode("utf-8")
+        .strip()
+    )
+except:
+    dvc_version = "unknown"
+
 with mlflow.start_run():
     data = pd.read_csv(DATA_PATH)
 
@@ -50,6 +60,7 @@ with mlflow.start_run():
     mlflow.log_param("max_iter", max_iter)
     mlflow.log_metric("accuracy", acc)
     mlflow.log_param("git_commit", git_commit)
+    mlflow.log_param("dvc_version", dvc_version)
 
     result = mlflow.sklearn.log_model(model, "model")
 
@@ -68,6 +79,8 @@ with mlflow.start_run():
     )
 
     print(f"Model version {model_version} promoted to Staging")
+    print("Note: Promotion to Production happens after quality gates validation")
+    print("      Run: python ml/quality_gates.py")
 
     joblib.dump(model, MODEL_PATH)
     print(f"Model saved to {MODEL_PATH}")
