@@ -1,6 +1,19 @@
 import streamlit as st
 import requests
 
+import sys
+try:
+    import streamlit as st
+except ImportError as e:
+    if "altair" in str(e).lower():
+        print("Warning: Altair not found, but Streamlit will try to run without it.")
+        # On ignore l'erreur et on continue
+        import streamlit as st
+    else:
+        raise e
+
+
+
 # Configuration de la page
 st.set_page_config(
     page_title="Diabetes Prediction App",
