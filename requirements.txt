@@ -8,3 +8,5 @@ pydantic
 mlflow
 httpx
 seaborn
+streamlit
+requests
