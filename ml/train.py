@@ -1,8 +1,11 @@
 import pandas as pd
+import seaborn as sns
+import matplotlib.pyplot as plt
 from sklearn.model_selection import train_test_split
 from sklearn.linear_model import LogisticRegression
+from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, roc_auc_score, confusion_matrix
+from sklearn.preprocessing import StandardScaler
 from mlflow.tracking import MlflowClient
-from sklearn.metrics import accuracy_score
 import joblib
 import os
 import mlflow
@@ -45,22 +48,43 @@ with mlflow.start_run():
         X, y, test_size=0.2, random_state=42
     )
 
+    scaler = StandardScaler()
+    X_train_scaled = scaler.fit_transform(X_train)
+    X_test_scaled = scaler.transform(X_test)
+
     max_iter = 1000
     model = LogisticRegression(max_iter=max_iter)
 
-    model.fit(X_train, y_train)
+    model.fit(X_train_scaled, y_train)
 
-    y_pred = model.predict(X_test)
+    y_pred = model.predict(X_test_scaled)
+    y_prob = model.predict_proba(X_test)[:,1]
+
     acc = accuracy_score(y_test, y_pred)
+    precision = precision_score(y_test, y_pred)
+    recall = recall_score(y_test, y_pred)
+    f1 = f1_score(y_test, y_pred)
 
-    print(f"Accuracy: {acc:.4f}")
+    roc_auc = roc_auc_score(y_test, y_prob)
+
+    cm = confusion_matrix(y_test, y_pred)
+    sns.heatmap(cm, annot=True, fmt="d")
+    plt.title("Confusion Matrix")
+    plt.show()
+    plt.savefig("confusion_matrix.png")
 
     # Logs MLflow
     mlflow.log_param("model_type", "LogisticRegression")
     mlflow.log_param("max_iter", max_iter)
     mlflow.log_metric("accuracy", acc)
+    mlflow.log_metric("precision", precision)
+    mlflow.log_metric("recall", recall)
+    mlflow.log_metric("f1_score", f1)
+    mlflow.log_metric("roc_auc", roc_auc)
     mlflow.log_param("git_commit", git_commit)
+    mlflow.log_artifact("confusion_matrix.png")
     mlflow.log_param("dvc_version", dvc_version)
+
 
     result = mlflow.sklearn.log_model(model, "model")
 
