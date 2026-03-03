@@ -7,3 +7,4 @@ pytest
 pydantic
 mlflow
 httpx
+seaborn
