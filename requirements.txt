@@ -10,3 +10,4 @@ httpx
 seaborn
 streamlit
 requests
+altair>=4.0.0
