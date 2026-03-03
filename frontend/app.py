@@ -3,8 +3,6 @@ import requests
 
 import sys
 
-sys.modules["imghdr"] = type(sys)("imghdr")
-
 try:
     import streamlit as st
 except ImportError as e:
