@@ -90,7 +90,7 @@ feature/xxx → [PR, tests] → dev → [integration] → staging → [validatio
 
 ## 🔄 CI/CD Pipelines
 
-The project implements **3 GitHub Actions workflows** for automated testing and deployment:
+The project implements **3 main GitHub Actions workflows** for automated testing and deployment, plus **1 optional training workflow**:
 
 ### **Pipeline 1: PR → dev** (Unit + Integration + Docker Build)
 
@@ -173,6 +173,28 @@ The project implements **3 GitHub Actions workflows** for automated testing and 
 **Key Advantage**: Production deploys the already validated model candidate from registry flow (`@Staging` -> `@Production`), without retraining on `main`.
 
 **Result**: Only models passing quality gates reach production with `@Production` alias
+
+---
+
+### **Pipeline 4: Train Model (On-Demand)**
+
+**Trigger**: Manual run (`workflow_dispatch`)  
+**File**: `.github/workflows/train-model.yml`
+
+**Purpose**: Train and register a new candidate model version when retraining is needed.
+
+**Steps**:
+1. ✅ Checkout code
+2. ✅ Setup Python 3.10
+3. ✅ Install dependencies (`requirements.txt` + `dvc[s3]`)
+4. ✅ Pull dataset from DVC remote (`dvc pull -r myremote`)
+5. ✅ Run training script (`python ml/train.py`)
+6. ✅ Log run/metrics to MLflow
+7. ✅ Register model version and assign alias `@Staging`
+
+**Why manual**:
+- Avoids retraining on every code merge
+- Lets the team control when to refresh the model candidate
 
 ---
 
