@@ -50,7 +50,7 @@ Production-grade ML application with full CI/CD pipeline, model versioning, and 
                            ▼
                   ┌──────────────────┐
                   │  Cloud Deploy    │
-                  │ (Railway/Render) │
+                  │    (Streamlit)   │
                   └──────────────────┘
 ```
 
@@ -65,7 +65,7 @@ Production-grade ML application with full CI/CD pipeline, model versioning, and 
 - **Testing**: Pytest
 - **Container**: Docker
 - **CI/CD**: GitHub Actions
-- **Deployment**: Railway/Render (Cloud)
+- **Deployment**: Streamlit Cloud
 
 ---
 
@@ -277,6 +277,7 @@ model = mlflow.pyfunc.load_model(MLFLOW_MODEL_URI)
 | Type | File | Count | Purpose |
 |------|------|-------|---------|
 | **Unit** | `test_unit_schema.py` | 1 | Pydantic validation of input schema |
+| **Unit** | `test_api.py` | 2 | Verifying the API endpoint (/health and /predict) |
 | **Integration** | `test_integration_mlflow.py` | 1 | MLflow model loading & inference |
 | **Integration** | `test_integration_api_mlflow.py` | 1 | API output matches model direct output |
 | **E2E** | `test_e2e.py` | 1 | Full prediction flow via HTTP |
@@ -525,6 +526,8 @@ MLOps_project/
 │       ├── main.py            # API endpoints
 │       ├── predict.py         # Model inference (MLflow)
 │       └── schemas.py         # Pydantic models
+├── frontend/                   # Streamlit Application
+│   └── app.py                 # App code
 ├── ml/                         # ML Pipeline
 │   ├── train.py               # Model training
 │   ├── quality_gates.py        # Quality validation
